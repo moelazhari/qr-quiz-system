@@ -1,0 +1,60 @@
+# ===============================
+# Node / Next.js
+# ===============================
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# ===============================
+# Logs
+# ===============================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# ===============================
+# Environment variables
+# ===============================
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Vercel specific
+.vercel
+
+# ===============================
+# OS / Editor junk
+# ===============================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ===============================
+# TypeScript
+# ===============================
+*.tsbuildinfo
+
+# ===============================
+# Prisma / DB (if you ever add it)
+# ===============================
+prisma/dev.db
+prisma/dev.db-journal
+
+# ===============================
+# Coverage / Tests
+# ===============================
+coverage/
+
+# ===============================
+# Misc
+# ===============================
+*.pem
+*.key
