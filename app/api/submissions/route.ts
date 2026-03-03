@@ -43,6 +43,16 @@ export async function GET(request: NextRequest) {
         }
 
         if (role === 'teacher' && quizId) {
+            // Ensure teacher owns the quiz before exposing submissions
+            const quizCheck = await runQuery<{ id: number }>(
+                'SELECT id FROM quizzes WHERE id = $1 AND teacher_id = $2',
+                [parseInt(quizId), userId]
+            );
+
+            if (quizCheck.rows.length === 0) {
+                return NextResponse.json({ error: 'Quiz not found' }, { status: 404 });
+            }
+
             // Fetch all submissions for a specific quiz
             const result = await runQuery<Submission>(
                 'SELECT * FROM submissions WHERE quiz_id = $1 ORDER BY submitted_at DESC',
@@ -98,15 +108,24 @@ export async function POST(request: NextRequest) {
         const processedAnswers: Answer[] = [];
 
         quiz.questions.forEach((question: any) => {
+            const questionType = question.type || 'mcq';
             const studentAnswer = answers[question.id];
-            const isCorrect = studentAnswer === question.correctAnswer;
+            let isCorrect = false;
+
+            if (questionType === 'mcq') {
+                isCorrect = studentAnswer === question.correctAnswer;
+            } else {
+                const normalizedStudentAnswer = String(studentAnswer ?? '').trim().toLowerCase();
+                const normalizedCorrectAnswer = String(question.correctTextAnswer ?? '').trim().toLowerCase();
+                isCorrect = normalizedStudentAnswer.length > 0 && normalizedStudentAnswer === normalizedCorrectAnswer;
+            }
 
             totalPoints += question.points;
             if (isCorrect) totalScore += question.points;
 
             processedAnswers.push({
                 questionId: question.id,
-                selectedAnswer: studentAnswer,
+                response: studentAnswer ?? '',
                 isCorrect,
                 points: isCorrect ? question.points : 0
             });

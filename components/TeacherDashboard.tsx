@@ -2,16 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import { Quiz } from '@/types';
-import CreateQuizModal from './CreateQuizModal';
 import QuizCard from './QuizCard';
 import QuizStatsModal from './QuizStatsModal';
 
 export default function TeacherDashboard() {
     const { data: session } = useSession();
+    const router = useRouter();
     const [quizzes, setQuizzes] = useState<Quiz[]>([]);
     const [loading, setLoading] = useState(true);
-    const [showCreateModal, setShowCreateModal] = useState(false);
     const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
     const [showStatsModal, setShowStatsModal] = useState(false);
 
@@ -74,7 +74,7 @@ export default function TeacherDashboard() {
                         </p>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
+                        <button onClick={() => router.push('/dashboard/quizzes/new')} className="btn-primary flex items-center gap-2">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                             </svg>
@@ -143,7 +143,7 @@ export default function TeacherDashboard() {
                     ) : quizzes.length === 0 ? (
                         <div className="text-center py-12">
                             <p className="text-slate-400 mb-4">No quizzes yet</p>
-                            <button onClick={() => setShowCreateModal(true)} className="btn-primary">
+                            <button onClick={() => router.push('/dashboard/quizzes/new')} className="btn-primary">
                                 Create Your First Quiz
                             </button>
                         </div>
@@ -168,16 +168,6 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Modals */}
-            {showCreateModal && (
-                <CreateQuizModal
-                    onClose={() => setShowCreateModal(false)}
-                    onSuccess={() => {
-                        setShowCreateModal(false);
-                        fetchQuizzes();
-                    }}
-                />
-            )}
-
             {showStatsModal && selectedQuiz && (
                 <QuizStatsModal
                     quiz={selectedQuiz}

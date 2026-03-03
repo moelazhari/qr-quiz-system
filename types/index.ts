@@ -22,9 +22,12 @@ export interface Quiz {
 
 export interface Question {
   id: string;
+  type?: 'mcq' | 'text' | 'diagram';
   question: string;
-  options: string[];
-  correctAnswer: number;
+  options?: string[];
+  correctAnswer?: number;
+  correctTextAnswer?: string;
+  diagramImageUrl?: string;
   points: number;
 }
 
@@ -43,7 +46,7 @@ export interface Submission {
 
 export interface Answer {
   questionId: string;
-  selectedAnswer: number;
+  response: string | number;
   isCorrect: boolean;
   points: number;
 }

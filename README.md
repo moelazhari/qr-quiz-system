@@ -9,7 +9,7 @@ A modern, role-based web application for creating and managing quizzes with QR c
 ## 🌟 Features
 
 ### For Teachers
-- **Quiz Creation & Management**: Create quizzes with multiple-choice questions
+- **Quiz Creation & Management**: Create quizzes with multiple-choice, text-answer, and diagram-based questions
 - **QR Code Generation**: Automatically generate QR codes for easy quiz access
 - **Real-time Analytics**: Track student submissions, scores, and performance
 - **Quiz Control**: Activate/deactivate quizzes and manage questions
@@ -91,8 +91,8 @@ A modern, role-based web application for creating and managing quizzes with QR c
 3. **Create a quiz**:
    - Click "Create Quiz"
    - Enter quiz title and description
-   - Add questions with multiple-choice options
-   - Mark the correct answer for each question
+   - Add MCQ, text-answer, or diagram-based questions
+   - Mark the correct answer for each question type
    - Set points for each question
 4. **Share the QR code**:
    - View the generated QR code
@@ -107,7 +107,8 @@ A modern, role-based web application for creating and managing quizzes with QR c
 2. **Scan the QR code** provided by your teacher
 3. **Login** if prompted
 4. **Answer all questions**:
-   - Select one option per question
+   - Select options for MCQ questions
+   - Write short answers for text/diagram questions
    - Track your progress with the progress bar
 5. **Submit the quiz**:
    - Review your answers
