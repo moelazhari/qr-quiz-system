@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Question } from '@/types';
 import DiagramBuilder from '@/components/DiagramBuilder';
-import { createEmptyDiagram, normalizeDiagram, validateMeriseDiagram } from '@/lib/diagram';
+import { createEmptyDiagram, normalizeDiagram } from '@/lib/diagram';
 
 const EMPTY_MCQ_OPTIONS = ['', '', '', ''];
 
@@ -202,10 +202,6 @@ export default function CreateQuizPage() {
             } else if (q.type === 'diagram') {
                 if ((q.diagramTemplate?.nodes || []).length === 0) {
                     return `Question ${i + 1}: build the expected diagram.`;
-                }
-                const meriseIssues = validateMeriseDiagram(q.diagramTemplate);
-                if (meriseIssues.length > 0) {
-                    return `Question ${i + 1}: ${meriseIssues[0]}`;
                 }
             } else {
                 if ((q.gradingMode || 'manual') === 'auto' && !(q.correctTextAnswer || '').trim()) {

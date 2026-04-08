@@ -116,6 +116,11 @@ function edgeVector(edge: DiagramEdge, nodes: DiagramNode[]) {
     return `${base} [${cards}]`;
 }
 
+function scoreRatio(matched: number, expected: number) {
+    if (expected <= 0) return 1;
+    return Math.max(0, Math.min(1, matched / expected));
+}
+
 export function describeNodeVector(node: DiagramNode) {
     return `${nodeVector(node)}:${normalizeAttributes(node).join('|')}`;
 }
@@ -148,169 +153,44 @@ export function appendDiagramActionEvent(diagram: DiagramModel, event: DiagramAc
     };
 }
 
-function isEntityLike(kind: DiagramNodeKind) {
-    return kind === 'entity' || kind === 'pseudo_entity';
-}
-
 export function getMeriseLinkRule(sourceKind?: DiagramNodeKind, targetKind?: DiagramNodeKind) {
     if (!sourceKind || !targetKind) {
         return {
             allowsCardinality: true,
             requiresCardinality: false,
-            helperText: 'Select two nodes to see the valid link rule.',
+            helperText: 'Cardinalities are optional. Add them only if you want them shown on the link.',
         };
     }
 
     if (sourceKind === 'association' || targetKind === 'association') {
         return {
             allowsCardinality: true,
-            requiresCardinality: true,
-            helperText: 'Association links require cardinalities on both sides.',
+            requiresCardinality: false,
+            helperText: 'Association links often use cardinalities, but they are optional in this editor.',
         };
     }
 
     if (sourceKind === 'inheritance' || targetKind === 'inheritance') {
         return {
-            allowsCardinality: false,
+            allowsCardinality: true,
             requiresCardinality: false,
-            helperText: 'Inheritance links do not use cardinalities.',
+            helperText: 'Cardinalities are optional here too. Leave them empty unless you want to show them.',
         };
     }
 
     if (sourceKind === 'attribute' || targetKind === 'attribute') {
         return {
-            allowsCardinality: false,
+            allowsCardinality: true,
             requiresCardinality: false,
-            helperText: 'Attribute links do not use cardinalities.',
+            helperText: 'Cardinalities are optional here too. Leave them empty unless you want to show them.',
         };
     }
 
     return {
-        allowsCardinality: false,
+        allowsCardinality: true,
         requiresCardinality: false,
-        helperText: 'This link type does not use cardinalities.',
+        helperText: 'Cardinalities are optional. Use them only if needed for the question.',
     };
-}
-
-function getConnectedEdges(diagram: DiagramModel, nodeId: string) {
-    return diagram.edges.filter((edge) => edge.source === nodeId || edge.target === nodeId);
-}
-
-function getOtherNode(diagram: DiagramModel, edge: DiagramEdge, nodeId: string) {
-    const otherId = edge.source === nodeId ? edge.target : edge.source;
-    return diagram.nodes.find((node) => node.id === otherId);
-}
-
-export function validateMeriseDiagram(diagramRaw?: DiagramModel | null) {
-    const diagram = normalizeDiagram(diagramRaw);
-    const issues: string[] = [];
-
-    diagram.nodes.forEach((node) => {
-        const label = normalizeText(node.label || '');
-        const edges = getConnectedEdges(diagram, node.id);
-
-        if (!label) {
-            issues.push(`${DIAGRAM_NODE_LABELS[node.kind]} must have a name.`);
-        }
-
-        if (node.kind === 'attribute') {
-            if (edges.length !== 1) {
-                issues.push(`Attribute "${node.label || 'Unnamed'}" must be linked to exactly one entity or association.`);
-            } else {
-                const target = getOtherNode(diagram, edges[0], node.id);
-                if (!target || !(isEntityLike(target.kind) || target.kind === 'association')) {
-                    issues.push(`Attribute "${node.label || 'Unnamed'}" can only connect to an entity, pseudo entity, or association.`);
-                }
-            }
-        }
-
-        if (isEntityLike(node.kind) && edges.length === 0) {
-            issues.push(`${DIAGRAM_NODE_LABELS[node.kind]} "${node.label || 'Unnamed'}" must participate in at least one relationship.`);
-        }
-
-        if (node.kind === 'association') {
-            const targets = edges.map((edge) => getOtherNode(diagram, edge, node.id)).filter(Boolean) as DiagramNode[];
-            if (targets.length < 2) {
-                issues.push(`Association "${node.label || 'Unnamed'}" must connect to at least two entities.`);
-            }
-            targets.forEach((target) => {
-                if (!isEntityLike(target.kind)) {
-                    issues.push(`Association "${node.label || 'Unnamed'}" can only connect to entities or pseudo entities.`);
-                }
-            });
-            edges.forEach((edge) => {
-                if (!edge.sourceCardinality || !edge.targetCardinality) {
-                    issues.push(`Association "${node.label || 'Unnamed'}" requires cardinalities on both sides of each link.`);
-                }
-            });
-        }
-
-        if (node.kind === 'inheritance') {
-            const targets = edges.map((edge) => getOtherNode(diagram, edge, node.id)).filter(Boolean) as DiagramNode[];
-            if (targets.length < 2) {
-                issues.push(`Inheritance "${node.label || 'Unnamed'}" must connect a parent entity and at least one child entity.`);
-            }
-            targets.forEach((target) => {
-                if (!isEntityLike(target.kind)) {
-                    issues.push(`Inheritance "${node.label || 'Unnamed'}" can only connect to entities or pseudo entities.`);
-                }
-            });
-        }
-    });
-
-    diagram.edges.forEach((edge) => {
-        if (edge.source === edge.target) {
-            issues.push('A link cannot connect a node to itself.');
-            return;
-        }
-
-        const source = diagram.nodes.find((node) => node.id === edge.source);
-        const target = diagram.nodes.find((node) => node.id === edge.target);
-        if (!source || !target) return;
-
-        const pair = [source.kind, target.kind];
-        const involvesAssociation = pair.includes('association');
-        const involvesInheritance = pair.includes('inheritance');
-        const involvesAttribute = pair.includes('attribute');
-
-        if (isEntityLike(source.kind) && isEntityLike(target.kind)) {
-            issues.push(`Entities "${source.label || 'Unnamed'}" and "${target.label || 'Unnamed'}" must not be linked directly without an association or inheritance.`);
-        }
-
-        if (involvesAssociation) {
-            const other = source.kind === 'association' ? target : source;
-            if (!isEntityLike(other.kind)) {
-                issues.push(`Association links must connect to entities or pseudo entities only.`);
-            }
-        }
-
-        if (involvesInheritance) {
-            const other = source.kind === 'inheritance' ? target : source;
-            if (!isEntityLike(other.kind)) {
-                issues.push(`Inheritance links must connect to entities or pseudo entities only.`);
-            }
-            if (edge.sourceCardinality || edge.targetCardinality) {
-                issues.push('Inheritance links must not use cardinalities.');
-            }
-        }
-
-        if (involvesAttribute) {
-            const attributeNode = source.kind === 'attribute' ? source : target;
-            const other = attributeNode.id === source.id ? target : source;
-            if (!(isEntityLike(other.kind) || other.kind === 'association')) {
-                issues.push(`Attribute "${attributeNode.label || 'Unnamed'}" has an invalid target.`);
-            }
-            if (edge.sourceCardinality || edge.targetCardinality) {
-                issues.push('Attribute links must not use cardinalities.');
-            }
-        }
-
-        if (!involvesAssociation && !involvesInheritance && !involvesAttribute && (edge.sourceCardinality || edge.targetCardinality)) {
-            issues.push('Cardinalities are only valid on association links.');
-        }
-    });
-
-    return Array.from(new Set(issues));
 }
 
 function countItems(values: string[]) {
@@ -350,7 +230,6 @@ function diffCounts(expected: Map<string, number>, actual: Map<string, number>) 
 export function gradeDiagramAnswer(expectedRaw?: DiagramModel | null, submittedRaw?: DiagramModel | null) {
     const expected = normalizeDiagram(expectedRaw);
     const submitted = normalizeDiagram(submittedRaw);
-    const meriseIssues = validateMeriseDiagram(submitted);
 
     const expectedNodeCounts = countItems(expected.nodes.map(nodeVector));
     const submittedNodeCounts = countItems(submitted.nodes.map(nodeVector));
@@ -372,15 +251,42 @@ export function gradeDiagramAnswer(expectedRaw?: DiagramModel | null, submittedR
         return !baseEdgeDiff.missing.includes(base);
     });
 
+    const expectedAttributeCount = expected.nodes.filter((node) => (node.attributes || []).length > 0).length;
+    const expectedCardinalityCount = expected.edges.filter((edge) => edge.sourceCardinality || edge.targetCardinality).length;
     const matchedNodes = Math.max(expected.nodes.length - nodeDiff.missing.length, 0);
-    const matchedAttributes = Math.max(expected.nodes.length - attributeDiff.missing.length, 0);
-    const matchedEdges = Math.max(expected.edges.length - edgeDiff.missing.length, 0);
-    const totalItems = Math.max(expected.nodes.length + expected.edges.length + expected.nodes.length, 1);
-    const matchedItems = matchedNodes + matchedAttributes + matchedEdges;
+    const matchedAttributes = Math.max(expectedAttributeCount - attributeDiff.missing.length, 0);
+    const matchedLinks = Math.max(expected.edges.length - baseEdgeDiff.missing.length, 0);
+    const matchedCardinalities = Math.max(expectedCardinalityCount - cardinalityMismatches.length, 0);
+    const totalItems = Math.max(expected.nodes.length + expectedAttributeCount + expected.edges.length + expectedCardinalityCount, 1);
+    const matchedItems = matchedNodes + matchedAttributes + matchedLinks + matchedCardinalities;
+
+    const nodeScore = scoreRatio(matchedNodes, expected.nodes.length);
+    const attributeScore = scoreRatio(matchedAttributes, expectedAttributeCount);
+    const linkScore = scoreRatio(matchedLinks, expected.edges.length);
+    const cardinalityScore = scoreRatio(matchedCardinalities, expectedCardinalityCount);
+
+    const weightedRatio = (
+        nodeScore * 0.35 +
+        attributeScore * 0.2 +
+        linkScore * 0.3 +
+        cardinalityScore * 0.15
+    );
 
     const details: DiagramGradeDetails = {
         matchedItems,
         totalItems,
+        nodeScore,
+        attributeScore,
+        linkScore,
+        cardinalityScore,
+        matchedNodeCount: matchedNodes,
+        expectedNodeCount: expected.nodes.length,
+        matchedAttributeCount: matchedAttributes,
+        expectedAttributeCount,
+        matchedLinkCount: matchedLinks,
+        expectedLinkCount: expected.edges.length,
+        matchedCardinalityCount: matchedCardinalities,
+        expectedCardinalityCount,
         missingNodes: nodeDiff.missing,
         extraNodes: nodeDiff.extra,
         missingAttributes: attributeDiff.missing,
@@ -388,10 +294,14 @@ export function gradeDiagramAnswer(expectedRaw?: DiagramModel | null, submittedR
         missingLinks: baseEdgeDiff.missing,
         extraLinks: baseEdgeDiff.extra,
         cardinalityMismatches,
-        meriseIssues,
+        meriseIssues: [],
     };
 
     const feedback = [
+        `Node match: ${matchedNodes}/${expected.nodes.length || 0}`,
+        `Attribute match: ${matchedAttributes}/${expectedAttributeCount}`,
+        `Link match: ${matchedLinks}/${expected.edges.length || 0}`,
+        `Cardinality match: ${matchedCardinalities}/${expectedCardinalityCount}`,
         ...details.missingNodes.map((value) => `Missing element: ${value}`),
         ...details.extraNodes.map((value) => `Unexpected element: ${value}`),
         ...details.missingAttributes.map((value) => `Missing attribute set: ${value}`),
@@ -399,16 +309,11 @@ export function gradeDiagramAnswer(expectedRaw?: DiagramModel | null, submittedR
         ...details.missingLinks.map((value) => `Missing link: ${value}`),
         ...details.extraLinks.map((value) => `Unexpected link: ${value}`),
         ...details.cardinalityMismatches.map((value) => `Cardinality mismatch: ${value}`),
-        ...details.meriseIssues.map((value) => `Merise rule: ${value}`),
     ];
-
-    const structurePenalty = Math.min(details.meriseIssues.length * 0.08, 0.5);
-    const rawRatio = matchedItems / totalItems;
-    const ratio = Math.max(0, rawRatio - structurePenalty);
 
     return {
         details,
         feedback,
-        ratio,
+        ratio: weightedRatio,
     };
 }

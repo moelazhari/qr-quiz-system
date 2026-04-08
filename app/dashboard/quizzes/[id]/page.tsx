@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Answer, DiagramModel, Question, Quiz, Submission } from '@/types';
 import DiagramBuilder from '@/components/DiagramBuilder';
-import { createEmptyDiagram, normalizeDiagram, validateMeriseDiagram } from '@/lib/diagram';
+import { createEmptyDiagram, normalizeDiagram } from '@/lib/diagram';
 
 type TabKey = 'overview' | 'questions' | 'submissions';
 
@@ -269,10 +269,6 @@ export default function TeacherQuizDetailsPage() {
             } else if (q.type === 'diagram') {
                 if ((q.diagramTemplate?.nodes || []).length === 0) {
                     return `Question ${i + 1}: build the expected diagram.`;
-                }
-                const meriseIssues = validateMeriseDiagram(q.diagramTemplate);
-                if (meriseIssues.length > 0) {
-                    return `Question ${i + 1}: ${meriseIssues[0]}`;
                 }
             } else {
                 if ((q.gradingMode || 'manual') === 'auto' && !(q.correctTextAnswer || '').trim()) {
@@ -1082,6 +1078,14 @@ export default function TeacherQuizDetailsPage() {
                                                         {Array.isArray(answer.feedback) && answer.feedback.length > 0 && (
                                                             <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3">
                                                                 <p className="text-xs uppercase tracking-[0.2em] text-amber-200">Auto-detected issues</p>
+                                                                {answer.autoGradeDetails && (
+                                                                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                                                        <p className="text-xs text-amber-100">Nodes: {answer.autoGradeDetails.matchedNodeCount}/{answer.autoGradeDetails.expectedNodeCount}</p>
+                                                                        <p className="text-xs text-amber-100">Attributes: {answer.autoGradeDetails.matchedAttributeCount}/{answer.autoGradeDetails.expectedAttributeCount}</p>
+                                                                        <p className="text-xs text-amber-100">Links: {answer.autoGradeDetails.matchedLinkCount}/{answer.autoGradeDetails.expectedLinkCount}</p>
+                                                                        <p className="text-xs text-amber-100">Cardinalities: {answer.autoGradeDetails.matchedCardinalityCount}/{answer.autoGradeDetails.expectedCardinalityCount}</p>
+                                                                    </div>
+                                                                )}
                                                                 <div className="mt-2 space-y-1">
                                                                     {answer.feedback.map((item, feedbackIndex) => (
                                                                         <p key={`${answer.questionId}-feedback-${feedbackIndex}`} className="text-xs text-amber-100">

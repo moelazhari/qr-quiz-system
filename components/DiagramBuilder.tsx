@@ -11,7 +11,6 @@ import {
     DIAGRAM_NODE_LABELS,
     getMeriseLinkRule,
     normalizeDiagram,
-    validateMeriseDiagram,
 } from '@/lib/diagram';
 
 const CARDINALITY_OPTIONS: DiagramCardinality[] = ['0', '1', 'N', 'M'];
@@ -66,13 +65,11 @@ export default function DiagramBuilder({
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [dragStartPosition, setDragStartPosition] = useState<{ x: number; y: number } | null>(null);
     const [isDropActive, setIsDropActive] = useState(false);
-    const [builderError, setBuilderError] = useState('');
     const canvasRef = useRef<HTMLDivElement | null>(null);
     const isStudentVariant = variant === 'student';
     const isViewerMode = mode === 'viewer';
 
     const diagram = normalizeDiagram(value);
-    const meriseIssues = validateMeriseDiagram(diagram);
     const selectedNode = diagram.nodes.find((node) => node.id === selectedNodeId) || null;
     const selectedEdge = diagram.edges.find((edge) => edge.id === selectedEdgeId) || null;
     const linkSourceNode = diagram.nodes.find((node) => node.id === linkSource);
@@ -81,55 +78,6 @@ export default function DiagramBuilder({
     const selectedEdgeSource = selectedEdge ? diagram.nodes.find((node) => node.id === selectedEdge.source) : undefined;
     const selectedEdgeTarget = selectedEdge ? diagram.nodes.find((node) => node.id === selectedEdge.target) : undefined;
     const selectedEdgeRule = getMeriseLinkRule(selectedEdgeSource?.kind, selectedEdgeTarget?.kind);
-
-    function isEntityLike(kind: DiagramNodeKind) {
-        return kind === 'entity' || kind === 'pseudo_entity';
-    }
-
-    const validateEdgeBeforeCreate = (edge: DiagramEdge) => {
-        const source = diagram.nodes.find((node) => node.id === edge.source);
-        const target = diagram.nodes.find((node) => node.id === edge.target);
-
-        if (!source || !target) return 'Choose valid source and target nodes.';
-        if (source.id === target.id) return 'A node cannot link to itself.';
-
-        if (isEntityLike(source.kind) && isEntityLike(target.kind)) {
-            return 'Two entities cannot be linked directly. Use an association or inheritance.';
-        }
-
-        if (source.kind === 'association' || target.kind === 'association') {
-            const other = source.kind === 'association' ? target : source;
-            if (!isEntityLike(other.kind)) {
-                return 'An association can only connect to entities or pseudo entities.';
-            }
-            if (!edge.sourceCardinality || !edge.targetCardinality) {
-                return 'Association links require cardinalities on both sides.';
-            }
-        }
-
-        if (source.kind === 'inheritance' || target.kind === 'inheritance') {
-            const other = source.kind === 'inheritance' ? target : source;
-            if (!isEntityLike(other.kind)) {
-                return 'Inheritance can only connect to entities or pseudo entities.';
-            }
-            if (edge.sourceCardinality || edge.targetCardinality) {
-                return 'Inheritance links must not use cardinalities.';
-            }
-        }
-
-        if (source.kind === 'attribute' || target.kind === 'attribute') {
-            const attributeNode = source.kind === 'attribute' ? source : target;
-            const other = attributeNode.id === source.id ? target : source;
-            if (!(isEntityLike(other.kind) || other.kind === 'association')) {
-                return 'An attribute can only connect to an entity, pseudo entity, or association.';
-            }
-            if (edge.sourceCardinality || edge.targetCardinality) {
-                return 'Attribute links must not use cardinalities.';
-            }
-        }
-
-        return '';
-    };
 
     const commit = (next: DiagramModel) => {
         onChange?.(normalizeDiagram(next));
@@ -141,7 +89,6 @@ export default function DiagramBuilder({
 
     const addNode = (kind: DiagramNodeKind, x: number, y: number) => {
         if (readOnly) return;
-        setBuilderError('');
         const node = createDiagramNode(kind, Math.max(16, x), Math.max(16, y));
         commitWithEvent(
             { ...diagram, nodes: [...diagram.nodes, node] },
@@ -167,7 +114,6 @@ export default function DiagramBuilder({
 
     const logNodeUpdate = (nodeId: string, summary: string, patch: Partial<DiagramNode>) => {
         if (readOnly) return;
-        setBuilderError('');
         const nextNodes = diagram.nodes.map((node) => (node.id === nodeId ? { ...node, ...patch } : node));
         const nextNode = nextNodes.find((node) => node.id === nodeId);
         if (!nextNode) return;
@@ -185,7 +131,6 @@ export default function DiagramBuilder({
 
     const deleteNode = (nodeId: string) => {
         if (readOnly) return;
-        setBuilderError('');
         const deletedNode = diagram.nodes.find((node) => node.id === nodeId);
         const deletedEdges = diagram.edges.filter((edge) => edge.source === nodeId || edge.target === nodeId);
         const nextDiagram = {
@@ -230,12 +175,6 @@ export default function DiagramBuilder({
             sourceCardinality: linkRule.allowsCardinality && linkSourceCardinality ? linkSourceCardinality : undefined,
             targetCardinality: linkRule.allowsCardinality && linkTargetCardinality ? linkTargetCardinality : undefined,
         };
-        const edgeValidationError = validateEdgeBeforeCreate(edge);
-        if (edgeValidationError) {
-            setBuilderError(edgeValidationError);
-            return;
-        }
-        setBuilderError('');
         commitWithEvent(
             { ...diagram, edges: [...diagram.edges, edge] },
             createDiagramActionEvent('edge_add', edge.id, 'Added relationship link', [
@@ -254,12 +193,6 @@ export default function DiagramBuilder({
         const nextEdges = diagram.edges.map((edge) => (edge.id === edgeId ? { ...edge, ...patch } : edge));
         const nextEdge = nextEdges.find((edge) => edge.id === edgeId);
         if (!nextEdge) return;
-        const edgeValidationError = validateEdgeBeforeCreate(nextEdge);
-        if (edgeValidationError) {
-            setBuilderError(edgeValidationError);
-            return;
-        }
-        setBuilderError('');
         commitWithEvent(
             {
                 ...diagram,
@@ -277,7 +210,6 @@ export default function DiagramBuilder({
 
     const deleteEdge = (edgeId: string) => {
         if (readOnly) return;
-        setBuilderError('');
         const deletedEdge = diagram.edges.find((edge) => edge.id === edgeId);
         const nextDiagram = {
             ...diagram,
@@ -671,28 +603,6 @@ export default function DiagramBuilder({
 
                 {!readOnly && (
                     <div className="mt-6 border-t border-slate-700 pt-5">
-                        {builderError && (
-                            <div className="mb-4 rounded-xl border border-red-500/60 bg-red-900/20 px-3 py-3 text-sm text-red-100">
-                                {builderError}
-                            </div>
-                        )}
-                        <div className={`mb-4 rounded-xl border px-3 py-3 ${meriseIssues.length === 0 ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-100' : 'border-amber-500/40 bg-amber-500/10 text-amber-100'}`}>
-                            <p className="text-xs font-semibold uppercase tracking-[0.2em]">
-                                {meriseIssues.length === 0 ? 'Merise structure looks valid' : 'Merise checks'}
-                            </p>
-                            {meriseIssues.length === 0 ? (
-                                <p className="mt-1 text-sm">No structural Merise issues detected right now.</p>
-                            ) : (
-                                <div className="mt-2 space-y-1">
-                                    {meriseIssues.slice(0, 5).map((issue, index) => (
-                                        <p key={`${issue}-${index}`} className="text-sm">{issue}</p>
-                                    ))}
-                                    {meriseIssues.length > 5 && (
-                                        <p className="text-xs opacity-80">+ {meriseIssues.length - 5} more issues</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
                         <h5 className="text-sm font-semibold text-white">Create Link</h5>
                         <div className="mt-3 space-y-3">
                             <select value={linkSource} onChange={(event) => setLinkSource(event.target.value)} className="input-field">

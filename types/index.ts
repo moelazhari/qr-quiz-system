@@ -75,6 +75,18 @@ export interface DiagramActionEvent {
 export interface DiagramGradeDetails {
   matchedItems: number;
   totalItems: number;
+  nodeScore: number;
+  attributeScore: number;
+  linkScore: number;
+  cardinalityScore: number;
+  matchedNodeCount: number;
+  expectedNodeCount: number;
+  matchedAttributeCount: number;
+  expectedAttributeCount: number;
+  matchedLinkCount: number;
+  expectedLinkCount: number;
+  matchedCardinalityCount: number;
+  expectedCardinalityCount: number;
   missingNodes: string[];
   extraNodes: string[];
   missingAttributes: string[];
