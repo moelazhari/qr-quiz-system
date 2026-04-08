@@ -65,6 +65,7 @@ export default function DiagramBuilder({
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [dragStartPosition, setDragStartPosition] = useState<{ x: number; y: number } | null>(null);
     const [isDropActive, setIsDropActive] = useState(false);
+    const [isTouchDragging, setIsTouchDragging] = useState(false);
     const canvasRef = useRef<HTMLDivElement | null>(null);
     const isStudentVariant = variant === 'student';
     const isViewerMode = mode === 'viewer';
@@ -242,15 +243,27 @@ export default function DiagramBuilder({
         addNode(kind, event.clientX - rect.left - NODE_WIDTH / 2, event.clientY - rect.top - NODE_HEIGHT / 2);
     };
 
-    const startNodeDrag = (event: React.MouseEvent<HTMLDivElement>, node: DiagramNode) => {
+    const startNodeDrag = (clientX: number, clientY: number, node: DiagramNode) => {
         if (readOnly || !canvasRef.current) return;
         const rect = canvasRef.current.getBoundingClientRect();
         setDraggingNodeId(node.id);
         setDragStartPosition({ x: node.x, y: node.y });
         setDragOffset({
-            x: event.clientX - rect.left - node.x,
-            y: event.clientY - rect.top - node.y,
+            x: clientX - rect.left - node.x,
+            y: clientY - rect.top - node.y,
         });
+    };
+
+    const handleNodeMouseStart = (event: React.MouseEvent<HTMLDivElement>, node: DiagramNode) => {
+        startNodeDrag(event.clientX, event.clientY, node);
+    };
+
+    const handleNodeTouchStart = (event: React.TouchEvent<HTMLDivElement>, node: DiagramNode) => {
+        const touch = event.touches[0];
+        if (!touch) return;
+        event.preventDefault();
+        setIsTouchDragging(true);
+        startNodeDrag(touch.clientX, touch.clientY, node);
     };
 
     useEffect(() => {
@@ -290,11 +303,31 @@ export default function DiagramBuilder({
             setDragStartPosition(null);
         };
 
+        const handleTouchMove = (event: TouchEvent) => {
+            const touch = event.touches[0];
+            if (!touch || !canvasRef.current) return;
+            event.preventDefault();
+            const rect = canvasRef.current.getBoundingClientRect();
+            updateNode(draggingNodeId, {
+                x: Math.max(8, Math.min(rect.width - NODE_WIDTH - 8, touch.clientX - rect.left - dragOffset.x)),
+                y: Math.max(8, Math.min(rect.height - NODE_HEIGHT - 8, touch.clientY - rect.top - dragOffset.y)),
+            });
+        };
+
+        const handleTouchEnd = () => {
+            setIsTouchDragging(false);
+            handleUp();
+        };
+
         window.addEventListener('mousemove', handleMove);
         window.addEventListener('mouseup', handleUp);
+        window.addEventListener('touchmove', handleTouchMove, { passive: false });
+        window.addEventListener('touchend', handleTouchEnd);
         return () => {
             window.removeEventListener('mousemove', handleMove);
             window.removeEventListener('mouseup', handleUp);
+            window.removeEventListener('touchmove', handleTouchMove);
+            window.removeEventListener('touchend', handleTouchEnd);
         };
     }, [diagram, dragOffset.x, dragOffset.y, dragStartPosition, draggingNodeId, readOnly]);
 
@@ -320,6 +353,7 @@ export default function DiagramBuilder({
                 width: NODE_WIDTH,
                 minHeight: NODE_HEIGHT,
                 cursor: readOnly ? 'default' : draggingNodeId === node.id ? 'grabbing' : 'grab',
+                touchAction: 'none',
             }}
             onClick={() => {
                 setSelectedNodeId(node.id);
@@ -328,7 +362,8 @@ export default function DiagramBuilder({
         >
             <div
                 className="border-b border-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-200"
-                onMouseDown={(event) => startNodeDrag(event, node)}
+                onMouseDown={(event) => handleNodeMouseStart(event, node)}
+                onTouchStart={(event) => handleNodeTouchStart(event, node)}
             >
                 {DIAGRAM_NODE_LABELS[node.kind]}
             </div>
@@ -359,7 +394,7 @@ export default function DiagramBuilder({
             </div>
             <p className="mt-2 text-sm text-slate-400">{description}</p>
 
-            <div className={`mt-5 ${isStudentVariant ? 'grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-1' : 'space-y-3'}`}>
+            <div className={`mt-5 ${isStudentVariant ? 'grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-1' : 'space-y-3'}`}>
                     {(Object.keys(DIAGRAM_NODE_LABELS) as DiagramNodeKind[]).map((kind) => (
                         <div
                             key={kind}
@@ -407,11 +442,12 @@ export default function DiagramBuilder({
                 onDrop={handleCanvasDrop}
                 className={`relative overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.18),_transparent_35%),linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.98))] transition-all duration-200 ${
                     isStudentVariant
-                        ? `order-1 min-h-[720px] border-slate-500/90 shadow-[0_30px_80px_rgba(15,23,42,0.45)] xl:order-2 ${isDropActive ? 'ring-4 ring-cyan-300/30 border-cyan-300/70 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.24),_transparent_35%),linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.98))]' : ''}`
+                        ? `order-1 min-h-[560px] sm:min-h-[640px] xl:min-h-[720px] border-slate-500/90 shadow-[0_30px_80px_rgba(15,23,42,0.45)] xl:order-2 ${isDropActive ? 'ring-4 ring-cyan-300/30 border-cyan-300/70 bg-[radial-gradient(circle_at_top,_rgba(34,211,238,0.24),_transparent_35%),linear-gradient(180deg,rgba(15,23,42,0.9),rgba(15,23,42,0.98))]' : ''}`
                         : `${isViewerMode ? 'min-h-[460px] border-slate-600/90' : 'min-h-[540px] border-slate-600'}`
                 }`}
                 style={{
                     backgroundSize: '100% 100%, 100% 100%',
+                    touchAction: isTouchDragging ? 'none' : 'manipulation',
                 }}
             >
                 <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(148,163,184,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.12) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
@@ -455,7 +491,7 @@ export default function DiagramBuilder({
                             <p className={`font-semibold text-white ${isStudentVariant ? 'text-2xl' : 'text-lg'}`}>{isStudentVariant ? 'Start Building Your Diagram' : 'Drop shapes here'}</p>
                             <p className={`mt-2 text-slate-400 ${isStudentVariant ? 'text-base' : 'text-sm'}`}>
                                 {isStudentVariant
-                                    ? 'Use the toolbox on the left. Drag a shape into this large workspace or tap a shape card to add it automatically.'
+                                    ? 'Use the toolbox below. Tap a shape card to add it, then tap and drag a node header to move it.'
                                     : 'Build the expected design by placing nodes, editing labels, and adding links with cardinalities.'}
                             </p>
                             {isStudentVariant && (
@@ -483,7 +519,7 @@ export default function DiagramBuilder({
                 {!readOnly && !isViewerMode && (
                     <div className={`absolute rounded-full border bg-slate-900/70 px-4 py-2 text-xs text-slate-300 backdrop-blur ${isStudentVariant ? 'bottom-5 left-5 border-cyan-300/30' : 'bottom-4 left-4 border-slate-500/60'}`}>
                         {isStudentVariant
-                            ? 'Tip: select any shape to rename it, then create links and set cardinalities from the panel.'
+                            ? 'Tip: tap a shape card to add it. Touch and drag a node header to move it.'
                             : 'Drag from the left panel, click a node to edit it, and use the right panel to create links.'}
                     </div>
                 )}
