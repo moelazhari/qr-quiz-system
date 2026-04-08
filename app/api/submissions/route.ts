@@ -4,7 +4,6 @@ import { authOptions } from '@/lib/auth';
 import { pool, ensureDbInitialized } from '@/lib/db';
 import { Submission, Quiz, Answer } from '@/types';
 import { gradeDiagramAnswer, normalizeDiagram } from '@/lib/diagram';
-import { roundScore } from '@/lib/format';
 
 // Helper to run queries safely
 async function runQuery<T = any>(query: string, params?: any[]): Promise<{ rows: T[] }> {
@@ -178,11 +177,17 @@ export async function POST(request: NextRequest) {
                 awardedPoints = isCorrect ? Number(question.points) : 0;
             } else if (questionType === 'diagram') {
                 const result = gradeDiagramAnswer(question.diagramTemplate, normalizeDiagram(studentAnswer));
-                const rawPoints = result.ratio * question.points;
-                const isPerfectMatch = result.ratio >= 0.999;
-                awardedPoints = isPerfectMatch ? Number(question.points) : roundScore(rawPoints);
+                const isPerfectMatch =
+                    result.details.missingNodes.length === 0 &&
+                    result.details.extraNodes.length === 0 &&
+                    result.details.missingAttributes.length === 0 &&
+                    result.details.extraAttributes.length === 0 &&
+                    result.details.missingLinks.length === 0 &&
+                    result.details.extraLinks.length === 0 &&
+                    result.details.cardinalityMismatches.length === 0;
+                awardedPoints = isPerfectMatch ? Number(question.points) : 0;
                 isCorrect = isPerfectMatch;
-                feedback = [`Overall match: ${Math.round(result.ratio * 100)}%`, ...result.feedback];
+                feedback = [isPerfectMatch ? 'Exact diagram match.' : 'Diagram does not exactly match the teacher reference.', ...result.feedback];
                 autoGradeDetails = result.details;
             } else {
                 isCorrect = evaluateTextAnswer(question, studentAnswer);
@@ -202,9 +207,6 @@ export async function POST(request: NextRequest) {
                 autoGradeDetails,
             });
         });
-
-        totalPoints = roundScore(totalPoints);
-        totalScore = roundScore(totalScore);
 
         const releaseMode = quiz.results_release_mode || 'immediate';
         const status =
