@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { pool, ensureDbInitialized } from '@/lib/db';
 import { Submission, Quiz, Answer } from '@/types';
+import { gradeDiagramAnswer, normalizeDiagram } from '@/lib/diagram';
 
 // Helper to run queries safely
 async function runQuery<T = any>(query: string, params?: any[]): Promise<{ rows: T[] }> {
@@ -13,6 +14,34 @@ async function runQuery<T = any>(query: string, params?: any[]): Promise<{ rows:
     } finally {
         client.release();
     }
+}
+
+function normalizeText(value: string) {
+    return value.trim().toLowerCase();
+}
+
+function evaluateTextAnswer(question: any, studentAnswerRaw: any) {
+    const studentAnswer = normalizeText(String(studentAnswerRaw ?? ''));
+    if (!studentAnswer) return false;
+
+    const acceptedAnswers = Array.isArray(question.acceptedTextAnswers)
+        ? question.acceptedTextAnswers.map((item: string) => normalizeText(String(item)))
+        : [];
+    const fallbackSingle = normalizeText(String(question.correctTextAnswer ?? ''));
+    const candidateAnswers = acceptedAnswers.length > 0 ? acceptedAnswers : [fallbackSingle];
+    const exactMatch = candidateAnswers.some((candidate: string) => candidate && candidate === studentAnswer);
+
+    if (exactMatch) return true;
+
+    const keywords = Array.isArray(question.requiredKeywords)
+        ? question.requiredKeywords.map((item: string) => normalizeText(String(item))).filter(Boolean)
+        : [];
+
+    if (keywords.length > 0) {
+        return keywords.every((keyword: string) => studentAnswer.includes(keyword));
+    }
+
+    return false;
 }
 
 // GET - Fetch submissions
@@ -39,7 +68,21 @@ export async function GET(request: NextRequest) {
             const params = quizId ? [userId, parseInt(quizId)] : [userId];
             const result = await runQuery<Submission>(query, params);
 
-            return NextResponse.json(result.rows);
+            const safeRows = result.rows.map((submission: any) => {
+                const normalized = {
+                    ...submission,
+                    status: submission.status || 'graded',
+                    is_released: submission.is_released !== false,
+                };
+                if (normalized.is_released) return normalized;
+
+                return {
+                    ...normalized,
+                    score: 0,
+                };
+            });
+
+            return NextResponse.json(safeRows);
         }
 
         if (role === 'teacher' && quizId) {
@@ -58,7 +101,12 @@ export async function GET(request: NextRequest) {
                 'SELECT * FROM submissions WHERE quiz_id = $1 ORDER BY submitted_at DESC',
                 [parseInt(quizId)]
             );
-            return NextResponse.json(result.rows);
+            const normalizedRows = result.rows.map((submission: any) => ({
+                ...submission,
+                status: submission.status || 'graded',
+                is_released: submission.is_released !== false,
+            }));
+            return NextResponse.json(normalizedRows);
         }
 
         return NextResponse.json([]);
@@ -107,36 +155,66 @@ export async function POST(request: NextRequest) {
         let totalPoints = 0;
         const processedAnswers: Answer[] = [];
 
+        let hasManualReviewQuestions = false;
+
         quiz.questions.forEach((question: any) => {
             const questionType = question.type || 'mcq';
+            const gradingMode = question.gradingMode || (questionType === 'mcq' ? 'auto' : 'manual');
             const studentAnswer = answers[question.id];
             let isCorrect = false;
+            let reviewed = gradingMode === 'auto';
+            let awardedPoints = 0;
+            let feedback: string[] | undefined;
+            let autoGradeDetails: Answer['autoGradeDetails'] | undefined;
 
-            if (questionType === 'mcq') {
+            if (gradingMode === 'manual') {
+                hasManualReviewQuestions = true;
+                isCorrect = false;
+                awardedPoints = 0;
+                reviewed = false;
+            } else if (questionType === 'mcq') {
                 isCorrect = studentAnswer === question.correctAnswer;
+                awardedPoints = isCorrect ? question.points : 0;
+            } else if (questionType === 'diagram') {
+                const result = gradeDiagramAnswer(question.diagramTemplate, normalizeDiagram(studentAnswer));
+                awardedPoints = Math.round(result.ratio * question.points);
+                isCorrect = awardedPoints >= question.points;
+                feedback = result.feedback;
+                autoGradeDetails = result.details;
             } else {
-                const normalizedStudentAnswer = String(studentAnswer ?? '').trim().toLowerCase();
-                const normalizedCorrectAnswer = String(question.correctTextAnswer ?? '').trim().toLowerCase();
-                isCorrect = normalizedStudentAnswer.length > 0 && normalizedStudentAnswer === normalizedCorrectAnswer;
+                isCorrect = evaluateTextAnswer(question, studentAnswer);
+                awardedPoints = isCorrect ? question.points : 0;
             }
 
             totalPoints += question.points;
-            if (isCorrect) totalScore += question.points;
+            totalScore += awardedPoints;
 
             processedAnswers.push({
                 questionId: question.id,
                 response: studentAnswer ?? '',
                 isCorrect,
-                points: isCorrect ? question.points : 0
+                points: awardedPoints,
+                reviewed,
+                feedback,
+                autoGradeDetails,
             });
         });
+
+        const releaseMode = quiz.results_release_mode || 'immediate';
+        const status =
+            releaseMode === 'after_review'
+                ? 'pending_review'
+                : hasManualReviewQuestions
+                    ? 'pending_review'
+                    : 'graded';
+        const isReleased = releaseMode === 'immediate' && status === 'graded';
 
         // Insert submission
         await runQuery(
             `INSERT INTO submissions (
         quiz_id, quiz_title, student_id, student_name, student_email,
-        answers, score, total_points
-      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8)`,
+        answers, score, total_points, status, is_released
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10)`,
             [
                 parseInt(quizId),
                 quiz.title,
@@ -145,12 +223,24 @@ export async function POST(request: NextRequest) {
                 session.user.email || '',
                 JSON.stringify(processedAnswers),
                 totalScore,
-                totalPoints
+                totalPoints,
+                status,
+                isReleased,
             ]
         );
 
+        if (!isReleased) {
+            return NextResponse.json({
+                message: 'Quiz submitted successfully and is pending teacher review',
+                status,
+                scoreReleased: false,
+            }, { status: 201 });
+        }
+
         return NextResponse.json({
             message: 'Quiz submitted successfully',
+            status,
+            scoreReleased: true,
             score: totalScore,
             totalPoints,
             percentage: (totalScore / totalPoints) * 100

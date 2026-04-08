@@ -29,9 +29,10 @@ export default function StudentDashboard() {
   };
 
   const calculateStats = () => {
-    if (submissions.length === 0) return { average: 0, total: 0, highest: 0 };
+    const releasedSubmissions = submissions.filter((submission) => submission.is_released !== false);
+    if (releasedSubmissions.length === 0) return { average: 0, total: submissions.length, highest: 0 };
 
-    const percentages = submissions.map(s => (s.score / s.total_points) * 100);
+    const percentages = releasedSubmissions.map(s => (s.score / s.total_points) * 100);
     const average = percentages.reduce((a, b) => a + b, 0) / percentages.length;
     const highest = Math.max(...percentages);
 
@@ -149,6 +150,7 @@ export default function StudentDashboard() {
           ) : (
             <div className="space-y-4">
               {submissions.map((submission, index) => {
+                const isReleased = submission.is_released !== false;
                 const percentage = Math.round((submission.score / submission.total_points) * 100);
                 const getGradeColor = (pct: number) => {
                   if (pct >= 90) return 'text-green-400 bg-green-900/30 border-green-500';
@@ -180,16 +182,23 @@ export default function StudentDashboard() {
                       </div>
                       
                       <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm text-slate-400 mb-1">Score</p>
-                          <p className="text-2xl font-bold text-white">
-                            {submission.score} / {submission.total_points}
-                          </p>
-                        </div>
-                        
-                        <div className={`px-4 py-2 rounded-lg border-2 ${getGradeColor(percentage)}`}>
-                          <p className="text-2xl font-bold">{percentage}%</p>
-                        </div>
+                        {isReleased ? (
+                          <>
+                            <div className="text-right">
+                              <p className="text-sm text-slate-400 mb-1">Score</p>
+                              <p className="text-2xl font-bold text-white">
+                                {submission.score} / {submission.total_points}
+                              </p>
+                            </div>
+                            <div className={`px-4 py-2 rounded-lg border-2 ${getGradeColor(percentage)}`}>
+                              <p className="text-2xl font-bold">{percentage}%</p>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="px-4 py-2 rounded-lg border-2 border-amber-500 bg-amber-900/30 text-amber-200">
+                            <p className="text-sm font-semibold">Pending Review</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

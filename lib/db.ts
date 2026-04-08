@@ -41,6 +41,11 @@ export async function initDatabase() {
       )
     `);
 
+        await client.query(`
+      ALTER TABLE quizzes
+      ADD COLUMN IF NOT EXISTS results_release_mode VARCHAR(30) DEFAULT 'immediate'
+    `);
+
         // Submissions table
         await client.query(`
       CREATE TABLE IF NOT EXISTS submissions (
@@ -56,6 +61,16 @@ export async function initDatabase() {
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(quiz_id, student_id)
       )
+    `);
+
+        await client.query(`
+      ALTER TABLE submissions
+      ADD COLUMN IF NOT EXISTS status VARCHAR(30) DEFAULT 'graded'
+    `);
+
+        await client.query(`
+      ALTER TABLE submissions
+      ADD COLUMN IF NOT EXISTS is_released BOOLEAN DEFAULT true
     `);
 
         // Indexes

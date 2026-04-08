@@ -73,14 +73,15 @@ export async function POST(request: NextRequest) {
 
         // Insert quiz
         const insertResult = await runQuery<{ id: number }>(
-            `INSERT INTO quizzes (title, description, teacher_id, teacher_name, questions, is_active)
-       VALUES ($1, $2, $3, $4, $5::jsonb, true) RETURNING id`,
+            `INSERT INTO quizzes (title, description, teacher_id, teacher_name, questions, results_release_mode, is_active)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, true) RETURNING id`,
             [
                 quizData.title,
                 quizData.description,
                 teacherId,
                 session.user.name || '',
                 JSON.stringify(quizData.questions),
+                quizData.results_release_mode || 'immediate',
             ]
         );
 
@@ -113,7 +114,7 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const { id, is_active, title, description, questions } = await request.json();
+        const { id, is_active, title, description, questions, results_release_mode } = await request.json();
         const teacherId = parseInt((session.user as any).id);
 
         // Build dynamic query
@@ -135,6 +136,10 @@ export async function PUT(request: NextRequest) {
         if (questions !== undefined) {
             values.push(JSON.stringify(questions));
             fields.push(`questions = $${values.length}::jsonb`);
+        }
+        if (results_release_mode !== undefined) {
+            values.push(results_release_mode);
+            fields.push(`results_release_mode = $${values.length}`);
         }
 
         values.push(parseInt(id));

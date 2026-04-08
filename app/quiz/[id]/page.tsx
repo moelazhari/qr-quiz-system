@@ -3,10 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
-import { Quiz } from '@/types';
+import { DiagramModel, Quiz } from '@/types';
 import Link from 'next/link';
+import DiagramBuilder from '@/components/DiagramBuilder';
+import { createEmptyDiagram } from '@/lib/diagram';
 
-type QuizAnswerValue = string | number;
+type QuizAnswerValue = string | number | DiagramModel;
 type QuizAnswers = Record<string, QuizAnswerValue>;
 
 export default function QuizPage() {
@@ -62,6 +64,10 @@ export default function QuizPage() {
 
         if (questionType === 'mcq') {
             return typeof value === 'number';
+        }
+
+        if (questionType === 'diagram') {
+            return Boolean(value && typeof value === 'object' && Array.isArray((value as DiagramModel).nodes) && (value as DiagramModel).nodes.length > 0);
         }
 
         return typeof value === 'string' && value.trim().length > 0;
@@ -126,6 +132,33 @@ export default function QuizPage() {
     }
 
     if (submitted && result) {
+        if (!result.scoreReleased) {
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4">
+                    <div className="card max-w-2xl w-full text-center fade-in">
+                        <div className="mb-6">
+                            <div className="w-32 h-32 mx-auto mb-4 rounded-full border-8 border-amber-400/50 flex items-center justify-center bg-slate-700">
+                                <svg className="w-16 h-16 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l2 2m8-2a10 10 0 11-20 0 10 10 0 0120 0z" />
+                                </svg>
+                            </div>
+                            <h2 className="text-3xl font-bold text-white mb-2">Submission Received</h2>
+                            <p className="text-slate-300">Your teacher will review manual questions and release your final grade.</p>
+                        </div>
+
+                        <div className="space-y-3">
+                            <Link href="/dashboard" className="btn-primary w-full block">
+                                Go to Dashboard
+                            </Link>
+                            <p className="text-slate-500 text-sm">
+                                You can track review status from your quiz history
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         const percentage = result.percentage;
         const getGrade = (pct: number) => {
             if (pct >= 90) return { grade: 'A', color: 'text-green-400', message: 'Excellent!' };
@@ -210,6 +243,7 @@ export default function QuizPage() {
                 <div className="space-y-6">
                     {quiz.questions.map((question, index) => {
                         const questionType = question.type || 'mcq';
+                        const questionImage = question.questionImageUrl || question.diagramImageUrl;
 
                         return (
                             <div key={question.id} className="card slide-in" style={{ animationDelay: `${index * 0.1}s` }}>
@@ -222,6 +256,16 @@ export default function QuizPage() {
                                         <p className="text-slate-500 text-sm">{question.points} {question.points === 1 ? 'point' : 'points'}</p>
                                     </div>
                                 </div>
+
+                                {questionImage && (
+                                    <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 mb-4">
+                                        <img
+                                            src={questionImage}
+                                            alt="Question illustration"
+                                            className="w-full max-h-80 object-contain rounded"
+                                        />
+                                    </div>
+                                )}
 
                                 {questionType === 'mcq' ? (
                                     <div className="space-y-3">
@@ -250,22 +294,26 @@ export default function QuizPage() {
                                             </button>
                                         ))}
                                     </div>
-                                ) : (
+                                ) : questionType === 'text' ? (
                                     <div className="space-y-3">
-                                        {questionType === 'diagram' && question.diagramImageUrl && (
-                                            <div className="bg-slate-800 border border-slate-600 rounded-lg p-3">
-                                                <img
-                                                    src={question.diagramImageUrl}
-                                                    alt="Question diagram"
-                                                    className="w-full max-h-80 object-contain rounded"
-                                                />
-                                            </div>
-                                        )}
                                         <textarea
                                             value={typeof answers[question.id] === 'string' ? (answers[question.id] as string) : ''}
                                             onChange={(e) => handleAnswerChange(question.id, e.target.value)}
                                             className="input-field min-h-[110px]"
-                                            placeholder={questionType === 'diagram' ? 'Enter your answer based on the diagram' : 'Enter your answer'}
+                                            placeholder="Enter your answer"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-sm text-indigo-100">
+                                            Build your diagram by dragging shapes into the canvas, then label nodes and create links with cardinalities.
+                                        </div>
+                                        <DiagramBuilder
+                                            value={typeof answers[question.id] === 'object' ? (answers[question.id] as DiagramModel) : createEmptyDiagram()}
+                                            onChange={(diagram) => handleAnswerChange(question.id, diagram)}
+                                            title="Student Diagram"
+                                            description="Your answer is saved in the form state as you build it."
+                                            variant="student"
                                         />
                                     </div>
                                 )}
