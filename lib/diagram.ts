@@ -152,6 +152,46 @@ function isEntityLike(kind: DiagramNodeKind) {
     return kind === 'entity' || kind === 'pseudo_entity';
 }
 
+export function getMeriseLinkRule(sourceKind?: DiagramNodeKind, targetKind?: DiagramNodeKind) {
+    if (!sourceKind || !targetKind) {
+        return {
+            allowsCardinality: true,
+            requiresCardinality: false,
+            helperText: 'Select two nodes to see the valid link rule.',
+        };
+    }
+
+    if (sourceKind === 'association' || targetKind === 'association') {
+        return {
+            allowsCardinality: true,
+            requiresCardinality: true,
+            helperText: 'Association links require cardinalities on both sides.',
+        };
+    }
+
+    if (sourceKind === 'inheritance' || targetKind === 'inheritance') {
+        return {
+            allowsCardinality: false,
+            requiresCardinality: false,
+            helperText: 'Inheritance links do not use cardinalities.',
+        };
+    }
+
+    if (sourceKind === 'attribute' || targetKind === 'attribute') {
+        return {
+            allowsCardinality: false,
+            requiresCardinality: false,
+            helperText: 'Attribute links do not use cardinalities.',
+        };
+    }
+
+    return {
+        allowsCardinality: false,
+        requiresCardinality: false,
+        helperText: 'This link type does not use cardinalities.',
+    };
+}
+
 function getConnectedEdges(diagram: DiagramModel, nodeId: string) {
     return diagram.edges.filter((edge) => edge.source === nodeId || edge.target === nodeId);
 }

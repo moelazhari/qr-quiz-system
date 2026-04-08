@@ -9,6 +9,7 @@ import {
     describeEdgeVector,
     describeNodeVector,
     DIAGRAM_NODE_LABELS,
+    getMeriseLinkRule,
     normalizeDiagram,
     validateMeriseDiagram,
 } from '@/lib/diagram';
@@ -16,6 +17,7 @@ import {
 const CARDINALITY_OPTIONS: DiagramCardinality[] = ['0', '1', 'N', 'M'];
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 84;
+type CardinalityValue = DiagramCardinality | '';
 
 interface DiagramBuilderProps {
     value?: DiagramModel | null;
@@ -58,8 +60,8 @@ export default function DiagramBuilder({
     const [draftAttribute, setDraftAttribute] = useState('');
     const [linkSource, setLinkSource] = useState('');
     const [linkTarget, setLinkTarget] = useState('');
-    const [linkSourceCardinality, setLinkSourceCardinality] = useState<DiagramCardinality>('1');
-    const [linkTargetCardinality, setLinkTargetCardinality] = useState<DiagramCardinality>('N');
+    const [linkSourceCardinality, setLinkSourceCardinality] = useState<CardinalityValue>('');
+    const [linkTargetCardinality, setLinkTargetCardinality] = useState<CardinalityValue>('');
     const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
     const [dragStartPosition, setDragStartPosition] = useState<{ x: number; y: number } | null>(null);
@@ -73,6 +75,12 @@ export default function DiagramBuilder({
     const meriseIssues = validateMeriseDiagram(diagram);
     const selectedNode = diagram.nodes.find((node) => node.id === selectedNodeId) || null;
     const selectedEdge = diagram.edges.find((edge) => edge.id === selectedEdgeId) || null;
+    const linkSourceNode = diagram.nodes.find((node) => node.id === linkSource);
+    const linkTargetNode = diagram.nodes.find((node) => node.id === linkTarget);
+    const linkRule = getMeriseLinkRule(linkSourceNode?.kind, linkTargetNode?.kind);
+    const selectedEdgeSource = selectedEdge ? diagram.nodes.find((node) => node.id === selectedEdge.source) : undefined;
+    const selectedEdgeTarget = selectedEdge ? diagram.nodes.find((node) => node.id === selectedEdge.target) : undefined;
+    const selectedEdgeRule = getMeriseLinkRule(selectedEdgeSource?.kind, selectedEdgeTarget?.kind);
 
     function isEntityLike(kind: DiagramNodeKind) {
         return kind === 'entity' || kind === 'pseudo_entity';
@@ -219,8 +227,8 @@ export default function DiagramBuilder({
             id: `edge-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
             source: linkSource,
             target: linkTarget,
-            sourceCardinality: linkSourceCardinality,
-            targetCardinality: linkTargetCardinality,
+            sourceCardinality: linkRule.allowsCardinality && linkSourceCardinality ? linkSourceCardinality : undefined,
+            targetCardinality: linkRule.allowsCardinality && linkTargetCardinality ? linkTargetCardinality : undefined,
         };
         const edgeValidationError = validateEdgeBeforeCreate(edge);
         if (edgeValidationError) {
@@ -357,6 +365,16 @@ export default function DiagramBuilder({
             window.removeEventListener('mouseup', handleUp);
         };
     }, [diagram, dragOffset.x, dragOffset.y, dragStartPosition, draggingNodeId, readOnly]);
+
+    useEffect(() => {
+        if (!linkRule.allowsCardinality) {
+            setLinkSourceCardinality('');
+            setLinkTargetCardinality('');
+        } else if (linkRule.requiresCardinality) {
+            if (!linkSourceCardinality) setLinkSourceCardinality('1');
+            if (!linkTargetCardinality) setLinkTargetCardinality('N');
+        }
+    }, [linkRule.allowsCardinality, linkRule.requiresCardinality]);
 
     const renderNode = (node: DiagramNode) => (
         <div
@@ -608,27 +626,37 @@ export default function DiagramBuilder({
                 ) : selectedEdge ? (
                     <div className="mt-4 space-y-4">
                         <p className="text-sm text-slate-300">Selected link</p>
-                        <div className="grid grid-cols-2 gap-3">
-                            <select
-                                value={selectedEdge.sourceCardinality || '1'}
-                                onChange={(event) => updateEdge(selectedEdge.id, { sourceCardinality: event.target.value as DiagramCardinality })}
-                                disabled={readOnly}
-                                className="input-field"
-                            >
-                                {CARDINALITY_OPTIONS.map((cardinality) => (
-                                    <option key={`source-${cardinality}`} value={cardinality}>{cardinality}</option>
-                                ))}
-                            </select>
-                            <select
-                                value={selectedEdge.targetCardinality || 'N'}
-                                onChange={(event) => updateEdge(selectedEdge.id, { targetCardinality: event.target.value as DiagramCardinality })}
-                                disabled={readOnly}
-                                className="input-field"
-                            >
-                                {CARDINALITY_OPTIONS.map((cardinality) => (
-                                    <option key={`target-${cardinality}`} value={cardinality}>{cardinality}</option>
-                                ))}
-                            </select>
+                        <div className={`rounded-xl border px-3 py-3 ${selectedEdgeRule.requiresCardinality ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-slate-700 bg-slate-900/40'}`}>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Link rule</p>
+                            <p className="mt-1 text-sm text-slate-200">{selectedEdgeRule.helperText}</p>
+                            {selectedEdgeRule.allowsCardinality ? (
+                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                    <select
+                                        value={selectedEdge.sourceCardinality || ''}
+                                        onChange={(event) => updateEdge(selectedEdge.id, { sourceCardinality: (event.target.value || undefined) as DiagramCardinality | undefined })}
+                                        disabled={readOnly}
+                                        className="input-field"
+                                    >
+                                        <option value="">Source cardinality</option>
+                                        {CARDINALITY_OPTIONS.map((cardinality) => (
+                                            <option key={`source-${cardinality}`} value={cardinality}>{cardinality}</option>
+                                        ))}
+                                    </select>
+                                    <select
+                                        value={selectedEdge.targetCardinality || ''}
+                                        onChange={(event) => updateEdge(selectedEdge.id, { targetCardinality: (event.target.value || undefined) as DiagramCardinality | undefined })}
+                                        disabled={readOnly}
+                                        className="input-field"
+                                    >
+                                        <option value="">Target cardinality</option>
+                                        {CARDINALITY_OPTIONS.map((cardinality) => (
+                                            <option key={`target-${cardinality}`} value={cardinality}>{cardinality}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ) : (
+                                <p className="mt-3 text-xs text-slate-500">This link should stay without cardinalities.</p>
+                            )}
                         </div>
 
                         {!readOnly && (
@@ -681,17 +709,27 @@ export default function DiagramBuilder({
                                 ))}
                             </select>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <select value={linkSourceCardinality} onChange={(event) => setLinkSourceCardinality(event.target.value as DiagramCardinality)} className="input-field">
-                                    {CARDINALITY_OPTIONS.map((cardinality) => (
-                                        <option key={`new-source-${cardinality}`} value={cardinality}>{cardinality}</option>
-                                    ))}
-                                </select>
-                                <select value={linkTargetCardinality} onChange={(event) => setLinkTargetCardinality(event.target.value as DiagramCardinality)} className="input-field">
-                                    {CARDINALITY_OPTIONS.map((cardinality) => (
-                                        <option key={`new-target-${cardinality}`} value={cardinality}>{cardinality}</option>
-                                    ))}
-                                </select>
+                            <div className={`rounded-xl border px-3 py-3 ${linkRule.requiresCardinality ? 'border-cyan-400/40 bg-cyan-500/10' : 'border-slate-700 bg-slate-900/40'}`}>
+                                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Link rule</p>
+                                <p className="mt-1 text-sm text-slate-200">{linkRule.helperText}</p>
+                                {linkRule.allowsCardinality ? (
+                                    <div className="mt-3 grid grid-cols-2 gap-3">
+                                        <select value={linkSourceCardinality} onChange={(event) => setLinkSourceCardinality(event.target.value as CardinalityValue)} className="input-field">
+                                            <option value="">Source cardinality</option>
+                                            {CARDINALITY_OPTIONS.map((cardinality) => (
+                                                <option key={`new-source-${cardinality}`} value={cardinality}>{cardinality}</option>
+                                            ))}
+                                        </select>
+                                        <select value={linkTargetCardinality} onChange={(event) => setLinkTargetCardinality(event.target.value as CardinalityValue)} className="input-field">
+                                            <option value="">Target cardinality</option>
+                                            {CARDINALITY_OPTIONS.map((cardinality) => (
+                                                <option key={`new-target-${cardinality}`} value={cardinality}>{cardinality}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <p className="mt-3 text-xs text-slate-500">No cardinality input is needed for this link type.</p>
+                                )}
                             </div>
 
                             <button onClick={addEdge} className="btn-primary w-full px-4 py-3 text-sm">
