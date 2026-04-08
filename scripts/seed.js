@@ -68,8 +68,8 @@ async function seed() {
         student_name VARCHAR(255) NOT NULL,
         student_email VARCHAR(255) NOT NULL,
         answers JSONB NOT NULL,
-        score INTEGER NOT NULL,
-        total_points INTEGER NOT NULL,
+        score NUMERIC(10,2) NOT NULL,
+        total_points NUMERIC(10,2) NOT NULL,
         submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (quiz_id, student_id)
       );

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { pool, ensureDbInitialized } from '@/lib/db';
 import { Submission, Quiz, Answer } from '@/types';
 import { gradeDiagramAnswer, normalizeDiagram } from '@/lib/diagram';
+import { roundScore } from '@/lib/format';
 
 // Helper to run queries safely
 async function runQuery<T = any>(query: string, params?: any[]): Promise<{ rows: T[] }> {
@@ -174,20 +175,22 @@ export async function POST(request: NextRequest) {
                 reviewed = false;
             } else if (questionType === 'mcq') {
                 isCorrect = studentAnswer === question.correctAnswer;
-                awardedPoints = isCorrect ? question.points : 0;
+                awardedPoints = isCorrect ? Number(question.points) : 0;
             } else if (questionType === 'diagram') {
                 const result = gradeDiagramAnswer(question.diagramTemplate, normalizeDiagram(studentAnswer));
-                awardedPoints = Math.round(result.ratio * question.points);
-                isCorrect = awardedPoints >= question.points;
-                feedback = result.feedback;
+                const rawPoints = result.ratio * question.points;
+                const isPerfectMatch = result.ratio >= 0.999;
+                awardedPoints = isPerfectMatch ? Number(question.points) : roundScore(rawPoints);
+                isCorrect = isPerfectMatch;
+                feedback = [`Overall match: ${Math.round(result.ratio * 100)}%`, ...result.feedback];
                 autoGradeDetails = result.details;
             } else {
                 isCorrect = evaluateTextAnswer(question, studentAnswer);
-                awardedPoints = isCorrect ? question.points : 0;
+                awardedPoints = isCorrect ? Number(question.points) : 0;
             }
 
-            totalPoints += question.points;
-            totalScore += awardedPoints;
+            totalPoints += Number(question.points);
+            totalScore += Number(awardedPoints);
 
             processedAnswers.push({
                 questionId: question.id,
@@ -199,6 +202,9 @@ export async function POST(request: NextRequest) {
                 autoGradeDetails,
             });
         });
+
+        totalPoints = roundScore(totalPoints);
+        totalScore = roundScore(totalScore);
 
         const releaseMode = quiz.results_release_mode || 'immediate';
         const status =

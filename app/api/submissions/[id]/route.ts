@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { pool, ensureDbInitialized } from '@/lib/db';
 import { Answer, Question, Submission } from '@/types';
+import { roundScore } from '@/lib/format';
 
 async function runQuery<T = any>(query: string, params?: any[]): Promise<{ rows: T[] }> {
     const client = await pool.connect();
@@ -125,7 +126,7 @@ export async function PUT(
                 const maxPoints = Number(question?.points) || 0;
                 const requestedPoints = Number(incoming.points);
                 const clampedPoints = Number.isFinite(requestedPoints)
-                    ? Math.max(0, Math.min(maxPoints, requestedPoints))
+                    ? roundScore(Math.max(0, Math.min(maxPoints, requestedPoints)))
                     : 0;
 
                 return {
@@ -139,7 +140,7 @@ export async function PUT(
                 };
             });
 
-            const recalculatedScore = regradedAnswers.reduce((acc, answer) => acc + (Number(answer.points) || 0), 0);
+            const recalculatedScore = roundScore(regradedAnswers.reduce((acc, answer) => acc + (Number(answer.points) || 0), 0));
             const hasUnreviewedManual = regradedAnswers.some((answer) => {
                 const question = questionMap.get(String(answer.questionId));
                 const questionType = question?.type || 'mcq';
@@ -186,17 +187,19 @@ export async function PUT(
             });
         }
 
-        if (!Number.isInteger(score) || score < 0) {
+        if (!Number.isFinite(Number(score)) || Number(score) < 0) {
             return NextResponse.json({ error: 'Invalid score' }, { status: 400 });
         }
 
-        if (score > submission.total_points) {
+        const roundedScore = roundScore(Number(score));
+
+        if (roundedScore > Number(submission.total_points)) {
             return NextResponse.json({ error: 'Score cannot exceed total points' }, { status: 400 });
         }
 
         const updated = await runQuery<{ id: number; score: number; total_points: number; answers: Answer[] }>(
             'UPDATE submissions SET score = $1 WHERE id = $2 RETURNING id, score, total_points, answers',
-            [score, parseInt(id)]
+            [roundedScore, parseInt(id)]
         );
 
         return NextResponse.json({

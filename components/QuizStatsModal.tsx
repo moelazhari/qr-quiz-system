@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Quiz, Submission } from '@/types';
+import { formatScore } from '@/lib/format';
 
 interface QuizStatsModalProps {
   quiz: Quiz;
@@ -140,7 +141,7 @@ export default function QuizStatsModal({ quiz, onClose }: QuizStatsModalProps) {
                               <div className="text-right">
                                 <p className="text-sm text-slate-400">Score</p>
                                 <p className="text-xl font-bold text-white">
-                                  {submission.score} / {submission.total_points}
+                                  {formatScore(Number(submission.score))} / {formatScore(Number(submission.total_points))}
                                 </p>
                               </div>
 

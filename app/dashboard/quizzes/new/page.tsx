@@ -195,7 +195,7 @@ export default function CreateQuizPage() {
             if (!q.question.trim() && !(q.questionImageUrl || '').trim()) {
                 return `Question ${i + 1}: add question text or an image.`;
             }
-            if (!Number.isInteger(q.points) || q.points < 1) return `Question ${i + 1}: points must be at least 1.`;
+            if (!Number.isFinite(Number(q.points)) || Number(q.points) <= 0) return `Question ${i + 1}: points must be greater than 0.`;
 
             if (q.type === 'mcq') {
                 if ((q.options || []).some((opt) => !opt.trim())) return `Question ${i + 1}: all options are required.`;
@@ -477,13 +477,14 @@ export default function CreateQuizPage() {
 
                                 <div>
                                     <label className="block text-sm text-slate-300 mb-2">Points</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={q.points}
-                                        onChange={(e) => updateQuestion(index, { points: parseInt(e.target.value) || 1 })}
-                                        className="input-field max-w-[140px]"
-                                    />
+                                            <input
+                                                type="number"
+                                                min="0.25"
+                                                step="0.25"
+                                                value={q.points}
+                                                onChange={(e) => updateQuestion(index, { points: parseFloat(e.target.value) || 1 })}
+                                                className="input-field max-w-[140px]"
+                                            />
                                 </div>
                             </div>
                         );

@@ -7,6 +7,7 @@ import { DiagramModel, Quiz } from '@/types';
 import Link from 'next/link';
 import DiagramBuilder from '@/components/DiagramBuilder';
 import { createEmptyDiagram } from '@/lib/diagram';
+import { formatScore } from '@/lib/format';
 
 type QuizAnswerValue = string | number | DiagramModel;
 type QuizAnswers = Record<string, QuizAnswerValue>;
@@ -183,7 +184,7 @@ export default function QuizPage() {
                     <div className="grid grid-cols-2 gap-4 mb-8">
                         <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                             <p className="text-slate-400 text-sm mb-1">Your Score</p>
-                            <p className="text-3xl font-bold text-white">{result.score} / {result.totalPoints}</p>
+                                        <p className="text-3xl font-bold text-white">{formatScore(Number(result.score))} / {formatScore(Number(result.totalPoints))}</p>
                         </div>
                         <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
                             <p className="text-slate-400 text-sm mb-1">Percentage</p>
@@ -253,7 +254,7 @@ export default function QuizPage() {
                                     </div>
                                     <div className="flex-1">
                                         <h3 className="text-lg font-semibold text-white mb-1">{question.question}</h3>
-                                        <p className="text-slate-500 text-sm">{question.points} {question.points === 1 ? 'point' : 'points'}</p>
+                                        <p className="text-slate-500 text-sm">{formatScore(Number(question.points))} {Number(question.points) === 1 ? 'point' : 'points'}</p>
                                     </div>
                                 </div>
 

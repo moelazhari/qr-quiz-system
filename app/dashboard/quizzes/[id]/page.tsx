@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Answer, DiagramModel, Question, Quiz, Submission } from '@/types';
 import DiagramBuilder from '@/components/DiagramBuilder';
 import { createEmptyDiagram, normalizeDiagram } from '@/lib/diagram';
+import { formatScore, roundScore } from '@/lib/format';
 
 type TabKey = 'overview' | 'questions' | 'submissions';
 
@@ -262,7 +263,7 @@ export default function TeacherQuizDetailsPage() {
             if (!q.question.trim() && !(q.questionImageUrl || '').trim()) {
                 return `Question ${i + 1}: add question text or an image.`;
             }
-            if (!Number.isInteger(q.points) || q.points < 1) return `Question ${i + 1}: points must be at least 1.`;
+            if (!Number.isFinite(Number(q.points)) || Number(q.points) <= 0) return `Question ${i + 1}: points must be greater than 0.`;
 
             if (q.type === 'mcq') {
                 if ((q.options || []).some((opt) => !opt.trim())) return `Question ${i + 1}: all options are required.`;
@@ -408,7 +409,7 @@ export default function TeacherQuizDetailsPage() {
 
     const updateRegradeAnswerPoints = (index: number, question: Question | undefined, value: number) => {
         const maxPoints = Number(question?.points) || 0;
-        const clamped = Math.max(0, Math.min(maxPoints, value));
+        const clamped = roundScore(Math.max(0, Math.min(maxPoints, value)));
         setGradingAnswers((prev) =>
             prev.map((answer, i) =>
                 i === index
@@ -554,7 +555,7 @@ export default function TeacherQuizDetailsPage() {
     }, [quiz]);
 
     const regradePreviewScore = useMemo(() => {
-        return gradingAnswers.reduce((acc, answer) => acc + (Number(answer.points) || 0), 0);
+        return roundScore(gradingAnswers.reduce((acc, answer) => acc + (Number(answer.points) || 0), 0));
     }, [gradingAnswers]);
 
     const pendingSubmissionsCount = useMemo(
@@ -896,9 +897,10 @@ export default function TeacherQuizDetailsPage() {
                                             <label className="block text-sm text-slate-300 mb-2">Points</label>
                                             <input
                                                 type="number"
-                                                min="1"
+                                                min="0.25"
+                                                step="0.25"
                                                 value={q.points}
-                                                onChange={(e) => updateQuestion(index, { points: parseInt(e.target.value) || 1 })}
+                                                onChange={(e) => updateQuestion(index, { points: parseFloat(e.target.value) || 1 })}
                                                 className="input-field max-w-[140px]"
                                             />
                                         </div>
@@ -950,7 +952,7 @@ export default function TeacherQuizDetailsPage() {
                                                 <p className="text-white font-semibold">{submission.student_name}</p>
                                                 <p className="text-slate-400 text-sm">{submission.student_email}</p>
                                                 <div className="flex items-center justify-between mt-3">
-                                                    <p className="text-slate-300 text-sm">Score: {submission.score}/{submission.total_points} ({pct}%)</p>
+                                                    <p className="text-slate-300 text-sm">Score: {formatScore(Number(submission.score))}/{formatScore(Number(submission.total_points))} ({pct}%)</p>
                                                     <span className={`text-xs px-2 py-1 rounded border ${
                                                         submission.status === 'pending_review'
                                                             ? 'text-amber-200 bg-amber-900/40 border-amber-500/60'
@@ -975,7 +977,7 @@ export default function TeacherQuizDetailsPage() {
                                             <p className="text-slate-400 text-sm">{selectedSubmission.student_email}</p>
                                             <p className="text-slate-500 text-xs mt-1">{new Date(selectedSubmission.submitted_at).toLocaleString()}</p>
                                             <p className="text-indigo-300 text-sm mt-2">
-                                                Final Score (preview): {regradePreviewScore} / {selectedSubmission.total_points}
+                                                Final Score (preview): {formatScore(Number(regradePreviewScore))} / {formatScore(Number(selectedSubmission.total_points))}
                                             </p>
                                             <div className="mt-2 flex items-center gap-2">
                                                 <span className={`text-xs px-2 py-1 rounded border ${
@@ -1019,7 +1021,7 @@ export default function TeacherQuizDetailsPage() {
                                                             <p className="text-slate-500 text-sm">{questionType === 'diagram' ? 'Diagram answer' : 'No answer'}</p>
                                                         )}
                                                         <p className={`text-xs mt-1 ${answer.isCorrect ? 'text-green-400' : 'text-red-400'}`}>
-                                                            {answer.isCorrect ? 'Correct' : 'Incorrect'} ({answer.points} pts)
+                                                            {answer.isCorrect ? 'Correct' : 'Incorrect'} ({formatScore(Number(answer.points))} pts)
                                                         </p>
 
                                                         {questionType === 'diagram' && typeof answer.response === 'object' && answer.response && (
@@ -1104,11 +1106,12 @@ export default function TeacherQuizDetailsPage() {
                                                                         type="number"
                                                                         min={0}
                                                                         max={question?.points || 0}
+                                                                        step="0.25"
                                                                         value={answer.points}
-                                                                        onChange={(e) => updateRegradeAnswerPoints(idx, question, Number(e.target.value) || 0)}
+                                                                        onChange={(e) => updateRegradeAnswerPoints(idx, question, Number.parseFloat(e.target.value) || 0)}
                                                                         className="input-field w-24 py-2"
                                                                     />
-                                                                    <span className="text-xs text-slate-500">/ {question?.points || 0}</span>
+                                                                    <span className="text-xs text-slate-500">/ {formatScore(Number(question?.points || 0))}</span>
                                                                 </div>
                                                                 <button
                                                                     onClick={() => updateRegradeAnswer(idx, question, true)}

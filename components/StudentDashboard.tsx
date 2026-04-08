@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { Submission } from '@/types';
 import Link from 'next/link';
+import { formatScore } from '@/lib/format';
 
 export default function StudentDashboard() {
   const { data: session } = useSession();
@@ -187,7 +188,7 @@ export default function StudentDashboard() {
                             <div className="text-right">
                               <p className="text-sm text-slate-400 mb-1">Score</p>
                               <p className="text-2xl font-bold text-white">
-                                {submission.score} / {submission.total_points}
+                                {formatScore(Number(submission.score))} / {formatScore(Number(submission.total_points))}
                               </p>
                             </div>
                             <div className={`px-4 py-2 rounded-lg border-2 ${getGradeColor(percentage)}`}>
